@@ -13,7 +13,7 @@ config = oci.config.from_file(
 
 #The Bastion Host Requires the public key in RSA format. I used the ssh-keygen utility to create mine (MacOS).
 #ssh-keygen -y -f ~/.ssh/id_rsa. Example "ssh-rsa LOTSOFSTUFF". Make sure it copies with no line breaks.
-sshrsa=("ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQC36lRHA/HZbFBjfYdDWAKlg6ebpkmXvvLmogDLjcl54EKX3S658NsyaAWprZ7/OWNFR0G00nsr+QvGkrzSz0NIneA1UnOaPlyfmcib868N6sSL3QNfHONrnohW++PM9q0q/lG17hpVSJifLJahhZsKOgHfrE6MA5shwdUA0T11d1s8OF6dXBjUjT+MFbrasLz9eU34iLQjJaSnPnE/OEnUCREaFo4fQeFGWAkNQAEj6qlh2+cIZl3UamLiUmOqFs8pF2W06wgfi0wZO20g3JQWr8NgBoBu+KsUg3VbHdHzExS2CKYzxeXb0xdVqwCRW80JJDVIAlcZIPGFGqSXAnFEKisYTJc4QajQJ9N+TOQwuGzQMS3pLHyfdtY9FQOrI9sDuSH+J0VZE86+eXMCYAIHRwByqomwNyzJdkIVsby1fBDJSRv4P5rZaeV2i9PJOakW0VDVjUjO29gUmtxl+Gg1Vv/5DhMJdBXdtpd1EiAbD1PWXw8osjMZnpD2H1PK/JE= jake@jake-mac")
+sshrsa=("ssh-rsa XXX")
 
 ###Optional Variables###
 #local_connections - Create a sample list of instances to connect to if looking for a nonSOCKS aware app or 1:1 instance mapping
