@@ -1,6 +1,7 @@
 import oci
 import time
 import subprocess
+import socket
 
 
 ###Required Variables###
@@ -28,6 +29,7 @@ bastion_fqdn = "host.bastion." + config["region"] + ".oci.oraclecloud.com" #OCI 
 bastion_client = oci.bastion.BastionClient(config) #Interact with Bastions on OCI
 pub_key_open=open(pub_key_file, 'r')
 pub_key_contents=pub_key_open.read()
+counter=0
 ##########################
 
 def ssh_rsa_set():
@@ -44,7 +46,7 @@ ssh_rsa_set()
 def verify_user_authed():
     auth_status=(identity.get_user(config["user"]).data.lifecycle_state)
     if auth_status == "ACTIVE":
-        print("User Has Been Authenticated With OCI\n")
+        print("\nUser Has Been Authenticated With OCI\n")
     else:
         print("Unable to Authenticate. . . Make sure you have the OCI cli installed and the user configured")
         print("Install OCI CLI Python SDK - https://docs.oracle.com/en-us/iaas/Content/API/SDKDocs/climanualinst.htm")
@@ -77,6 +79,18 @@ def verify_ssh_avail():
 
 verify_ssh_avail()
 
+def port_open(ip, port):
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.settimeout(5)
+    try:
+        port_open = s.connect_ex((ip, int(port))) == 0 # True if open, False if not
+        if port_open:
+            s.shutdown(socket.SHUT_RDWR)
+    except Exception:
+        port_open = False
+    s.close()
+    return port_open
+
 def create_bastion_session():
     try:
         global bastion_session
@@ -100,15 +114,25 @@ def create_bastion_session():
 create_bastion_session()
 
 def connect_socks5():
+    print("########################################LEAVE THIS WINDOW OPEN##############################")
+    print("##               Point your SOCKS5 client [Web Browser], [DB Client], [etc] to . . .")
+    print("##                      ------------------>localhost:5000<------------------")
+    print("##")
+    print("##  Application that are not SOCKS aware [RDP] can still take advantage of local forwarding.")
+    print("##                                 Go to the README for more info.")
+    print("########################################LEAVE THIS WINDOW OPEN##############################")
     try:
-        print("\n\n\n##########LEAVE THIS WINDOW OPEN##########")
-        print("Point your SOCKS5 client [Web Browser], [DB Client], [etc] to . . .")
-        print("------------------>localhost:5000<------------------\n")
-        print("Application that are not SOCKS aware [RDP] can still take advantage of local forwarding.\nGo to the README for more info.")
-        print("##########LEAVE THIS WINDOW OPEN##########")
         subprocess.run(("ssh", "-o serveraliveinterval=60", "-N", "-D", "127.0.0.1:5000", "{}@{}".format(bastion_session.data.id, bastion_fqdn, "-o serveraliveinterval=60")))
+        if port_open("localhost", "5000") is False:
+            print("Retrying . . .\n\n\n\n")
+            time.sleep(1)
+            connect_socks5()
+            #This loop needs to be close. Probably do a timeout loop
+        else:
+            print("Problem situation . . . failed to connect")
+            quit(-1)
     except:
-        print("Session Has Ended. Run the Script Again to Open A New Session")
+        print("Connection Closed. Goodbye!")
         quit(-1)
 
 def connect_local():
@@ -128,16 +152,17 @@ def connect_local():
         subprocess.Popen(("ssh", "-o serveraliveinterval=60", "-N", "-L",  "{}:{}:{}".format(local_port, oci_private_ip, remote_port), "{}@{}".format(bastion_session.data.id, bastion_fqdn)))
         print("Connected\n Connect to your OCI instance using a client with localhost:" +local_port) 
 
+
+
 def verify_session_active():
     session_response=bastion_client.get_session(session_id=bastion_session.data.id)
     if session_response.data.lifecycle_state == "ACTIVE":
         print("Creating a Local Tunnel through the Bastion Session\n")
-        time.sleep(5)
         connect_socks5()
     if session_response.data.lifecycle_state == "CREATING":
         print("OCI Is Creating The Bastion Session . . .")
         session_response=bastion_client.get_session(session_id=bastion_session.data.id)
-        time.sleep(2)
+        time.sleep(1)
         verify_session_active()
     if session_response.data.lifecycle_state == "DELETED":
         print("The Bastion Session has Timed Out.\n Run the Script Again to Create a New One")
@@ -147,15 +172,16 @@ def verify_session_active():
 
 verify_session_active()
 
-
-#Error handling needed for ssh client
-#Error #1
-#Connection closed by 147.154.11.76 port 22
-#Sometimes a connection is not able to be completed and the script closes. I need to build in a "retry" if I get this error instead of failing the script.
-#
-#Error #2
+###TODO###
+##Error handling needed for ssh client
 #Connection to host.bastion.us-ashburn-1.oci.oraclecloud.com closed by remote host.
 #The session closes after 30 minutes (usually). If I want to create a new session, I should just have to press "ENTER" and it will rebuild my session, or CNTL-C to exit.
 #
 #Error #3
 #If the Python Script exits (CNTL-C), need to gracefully kill the ssh session before exit so there isn't a stale SSH session. (Eventually it will close, but this would make the script better)
+#
+#########
+##Need to test on a Windows Client, and then redo the whole script :)
+#
+##########
+##Need to implement the local connection configuration, the function is already built
