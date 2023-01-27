@@ -11,28 +11,30 @@ config = oci.config.from_file(
 	"~/.oci/config",
 	"DEFAULT")
 
-#The Bastion Host Requires the public key in RSA format. I used the ssh-keygen utility to create mine (MacOS).
-#ssh-keygen -y -f ~/.ssh/id_rsa. Example "ssh-rsa LOTSOFSTUFF". Make sure it copies with no line breaks.
-sshrsa=("ssh-rsa XXX")
+#Public Key Location
+#Specify the full path of your public key. The Bastion Host Requires the public key in RSA format.
+pub_key_file="/Users/Jake/.ssh/id_rsa.pub"
 
 ###Optional Variables###
 #local_connections - Create a sample list of instances to connect to if looking for a nonSOCKS aware app or 1:1 instance mapping
 #debug_SSH_tunnel_mode #add a variable to add the -v option. 
-session_ttl=1800 #30 Minutes by default, and gives a good 
+session_ttl=1800 #30 Minutes by default, and gives a good balance
 session_display_name="MadeWithPython"
 
 ###Predefined Variables###
 identity = oci.identity.IdentityClient(config) #Get User Info
 bastion_fqdn = "host.bastion." + config["region"] + ".oci.oraclecloud.com" #OCI SDK does not show the bastion FQDN, so we have to make it manually
 bastion_client = oci.bastion.BastionClient(config) #Interact with Bastions on OCI
+pub_key_open=open(pub_key_file, 'r')
+pub_key_contents=pub_key_open.read()
 
 def ssh_rsa_set():
-    if sshrsa!="":
+    if sshrsa.read()!="":
         return
     else:
         print("The sshrsa variable needs a to be set before the script can create a Bastion Session")
         quit(-1)
-ssh_rsa_set()
+#ssh_rsa_set()
 
 def verify_user_authed():
     auth_status=(identity.get_user(config["user"]).data.lifecycle_state)
@@ -74,7 +76,7 @@ def create_bastion_session():
                     target_resource_details=oci.bastion.models.CreateManagedSshSessionTargetResourceDetails(
                         session_type="DYNAMIC_PORT_FORWARDING"),
                         key_details=oci.bastion.models.PublicKeyDetails(
-                        public_key_content=sshrsa),
+                        public_key_content=pub_key_contents),
                     display_name=session_display_name,
                     key_type="PUB",
                     session_ttl_in_seconds=session_ttl))
