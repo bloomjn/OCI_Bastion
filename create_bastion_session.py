@@ -4,22 +4,23 @@ import subprocess
 
 
 ###Required Variables###
+#OCID of the Bastion Host that was created in OCI
 bastion_host_ocid="ocid1.bastion.oc1.iad.amaaaaaac3adhhqa5z4bkw5hvtwu7cyf4bqgprl665qjwyrnteucyx2f46cq"
-
-#OCI Configuration File
+#OCI Configuration File that was generated from the Python SDK
 config = oci.config.from_file(
 	"~/.oci/config",
 	"DEFAULT")
-
-#Public Key Location
-#Specify the full path of your public key. The Bastion Host Requires the public key in RSA format.
+#Specify the full path of your SSH public key. The Bastion Host Requires the public key in RSA format.
+#The Bastion Host and your client SSH session will use the same keys in this configuration. The OCI profile keys are used to authenticate the user.
 pub_key_file="/Users/Jake/.ssh/id_rsa.pub"
+##########################
 
 ###Optional Variables###
 #local_connections - Create a sample list of instances to connect to if looking for a nonSOCKS aware app or 1:1 instance mapping
 #debug_SSH_tunnel_mode #add a variable to add the -v option. 
-session_ttl=1800 #30 Minutes by default, and gives a good balance
+session_ttl=1800 #30 Minutes by default, and gives a good balance for allowing stale sessions to close and allow other users to connect to the Bastion host.
 session_display_name="MadeWithPython"
+##########################
 
 ###Predefined Variables###
 identity = oci.identity.IdentityClient(config) #Get User Info
@@ -27,28 +28,38 @@ bastion_fqdn = "host.bastion." + config["region"] + ".oci.oraclecloud.com" #OCI 
 bastion_client = oci.bastion.BastionClient(config) #Interact with Bastions on OCI
 pub_key_open=open(pub_key_file, 'r')
 pub_key_contents=pub_key_open.read()
+##########################
 
 def ssh_rsa_set():
-    if sshrsa.read()!="":
+    if pub_key_contents:
         return
     else:
-        print("The sshrsa variable needs a to be set before the script can create a Bastion Session")
+        print("The 'pub_key_file' variable needs to be set before this script can run.")
+        print("Make sure keypair is generated and accessible so this script can continue.")
+        print("If you don't have a key-pair, running the command 'ssh-keygen' in your shell create a keypair you can use for this configuration.")
         quit(-1)
-#ssh_rsa_set()
+
+ssh_rsa_set()
 
 def verify_user_authed():
     auth_status=(identity.get_user(config["user"]).data.lifecycle_state)
     if auth_status == "ACTIVE":
-        print("User Has Been Authenticated\n")
+        print("User Has Been Authenticated With OCI\n")
     else:
-        print("Make sure to follow the pre-requesits to the script before continuing. Your user isn't authenticated")
+        print("Unable to Authenticate. . . Make sure you have the OCI cli installed and the user configured")
+        print("Install OCI CLI Python SDK - https://docs.oracle.com/en-us/iaas/Content/API/SDKDocs/climanualinst.htm")
+        print("The OCI Console can help create a configuration file for your user.")
+        print("---------->Go to Profile->'Username'->API Key")
+        print("When creating an API key, you can upload your current public key and convert it to PEM with this command.")
+        print("'ssh-keygen -f id_rsa.pub -e -m pem' where 'id_rsa.pub' is your public key")
         quit(-1)
 
 verify_user_authed()  
 
 def verify_bastionocid_set():
     if bastion_host_ocid == "":
-        print("The Bastion OCID needs to be set at the beginning of the Python Script. Edit the script before continuting.")
+        print("The Bastion OCID needs to be set at the beginning of the Python Script.")
+        print("Update the bastion_host_ocid with the Bastion Host OCID you want to connect to")
         quit(-1)
 
 verify_bastionocid_set()
@@ -60,7 +71,7 @@ def verify_ssh_avail():
         stderr=subprocess.STDOUT)
     except:
         print("OpenSSH needs to be accessible to use this script")
-        print("If you are using Windows, make sure you are using 64 Bit Python")
+        print("If you are using Windows, make sure you are using 64 Bit Python and that OpenSSH is installed on your machine, and is assessable by 'ssh'")
         print("Exiting . . . ")
         quit(-1)
 
@@ -135,3 +146,16 @@ def verify_session_active():
         #Might be able to loop through and create an additional session
 
 verify_session_active()
+
+
+#Error handling needed for ssh client
+#Error #1
+#Connection closed by 147.154.11.76 port 22
+#Sometimes a connection is not able to be completed and the script closes. I need to build in a "retry" if I get this error instead of failing the script.
+#
+#Error #2
+#Connection to host.bastion.us-ashburn-1.oci.oraclecloud.com closed by remote host.
+#The session closes after 30 minutes (usually). If I want to create a new session, I should just have to press "ENTER" and it will rebuild my session, or CNTL-C to exit.
+#
+#Error #3
+#If the Python Script exits (CNTL-C), need to gracefully kill the ssh session before exit so there isn't a stale SSH session. (Eventually it will close, but this would make the script better)
