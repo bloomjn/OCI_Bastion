@@ -15,12 +15,17 @@ config = oci.config.from_file(
 #Specify the full path of your SSH public key. The Bastion Host Requires the public key in RSA format.
 #The Bastion Host and your client SSH session will use the same keys in this configuration. The OCI profile keys are used to authenticate the user.
 pub_key_file="/Users/Jake/.ssh/id_rsa.pub"
+seed_int=9756 #You will be given a value to copy here after the first run of the script.
 ##########################
 
 ###Optional Variables###
-seed_int=9756
-local_connections="" #Create a sample list of instances to connect to if looking for a nonSOCKS aware app or 1:1 instance mapping
-#debug_SSH_tunnel_mode #add a variable to add the -v option. 
+
+#Create a sample list of instances to connect to if looking for a nonSOCKS aware app or 1:1 instance mapping.
+local_connections=[
+        ("10.0.0.1", 3389),
+        ("10.0.0.2", 1521),
+        ("10.0.0.3", 21)
+        ] 
 session_ttl=1800 #30 Minutes by default, and gives a good balance for allowing stale sessions to close and allow other users to connect to the Bastion host.
 session_display_name="MadeWithPython"
 ##########################
@@ -106,8 +111,7 @@ def local_random():
         
         port_value=random.randint(20000,50000)
         return(port_value)
-        #Define a local port. We need this to avoid local port collisions causing Bastions sessions to close when users are sharing.
-        #This will also simplify the script and avoid confusion.
+        #Define a local port. This avoids local port collisions which cause Bastions sessions to terminate prematurely.
 
 def port_open(ip, port):
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -125,7 +129,6 @@ def create_bastion_session():
     try:
         global bastion_session
         global bastion_session_lifecycle_state
-        verify_bastion_host_avail()
         bastion_session=bastion_client.create_session(
                 create_session_details=oci.bastion.models.CreateSessionDetails(
                     bastion_id=bastion_host_ocid,
@@ -146,12 +149,17 @@ create_bastion_session()
 
 def connect_local():
     print("You can set this as a dictionary of values if you plan on connecting to these instances frequently\n just uncomment and add your data to the sample variable XXX\n\n")
-    local_port=local_random()
+    #local_port=local_random()
     try: 
         if local_connections != "":
-            print("Connections already exist, adding them to the ")
-            #Use a loop and interate through the dictionary
+            print("Opening Predefined Connections")
+            for (ip_addr, remote_port) in local_connections:
+                local_port=local_random()
+                subprocess.Popen(("ssh", "-o serveraliveinterval=60", "-N", "-L", "{}:{}:{}".format(local_port, ip_addr, remote_port), "{}@{}".format(bastion_session.data.id, bastion_fqdn)))
+                print("Connections from localhost:{} MAPPED TO {}:{}".format(local_port, ip_addr, remote_port))
+            holding_pattern=input("\nPress Control-C to close the local forwarding Session:\n")
         else:
+            local_port=local_random()
             print("Here are the inputs you need to make a 1:1 mapping with your OCI instances")
             print("localmachine(Localport)--->OCI_Instance(Serving_Port)\n")
             oci_private_ip=input("Private IP of the OCI Instance You want to connect to\n>")
@@ -165,9 +173,8 @@ def connect_local():
             #SSH Error Line#2 : Could not request local forwarding.
             holding_pattern=input("\nPress Control-C to close the local forwarding Session:\n")
     except:
-        local_forwarding.kill()
-        quit(-1)
         print("Rerun the script to create a new session.")
+        quit(-1)
         
 def socks5_session():
     timeout = time.time()+11
@@ -189,7 +196,6 @@ def socks5_session():
                 print("## Applications that are not SOCKS aware [RDP] can still take advantage of local forwarding.")
                 print("## Set the ''local_connections' variable to statically build many local forwarding sessions.")
                 print("#############################################################################################")
-
                 while True:
                     #Evenually add "If local_connections var is set, run the function. Otherwise, wait for the user to do it."
                     moreconnections=input("\nType 'local' to configure local forwarding sessions. Press 'Control-C' to tear down the SOCKS5 session.\nNOTE:SOCKS5 and Local forwarding will run at the same time over the Bastion Session.\n>")
@@ -220,6 +226,3 @@ verify_bastion_session_lifecycle()
 
 ###TODO###
 ##Need to test on a Windows Client, and then redo the whole script :)
-#
-##########
-##SOCKS5 and Local Connections work under 1 session. Sweet! Time to give a dictionary and iterate through the connections.
