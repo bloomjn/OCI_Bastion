@@ -14,19 +14,20 @@ config = oci.config.from_file(
 	"DEFAULT")
 #Specify the full path of your SSH public key. The Bastion Host Requires the public key in RSA format.
 #The Bastion Host and your client SSH session will use the same keys in this configuration. The OCI profile keys are used to authenticate the user.
-pub_key_file="/Users/Jake/.ssh/id_rsa.pub"
+pub_key_file=r"/Users/Jake/.ssh/id_rsa.pub"
 seed_int=9756 #You will be given a value to copy here after the first run of the script.
 ##########################
 
 ###Optional Variables###
 
 #Create a sample list of instances to connect to if looking for a nonSOCKS aware app or 1:1 instance mapping.
-local_connections=[
-        ("10.0.0.1", 3389),
-        ("10.0.0.2", 1521),
-        ("10.0.0.3", 21)
-        ] 
-session_ttl=1800 #30 Minutes by default, and gives a good balance for allowing stale sessions to close and allow other users to connect to the Bastion host.
+local_connections=""
+#local_connections=[  
+#                    ("10.0.0.254", 8000),
+#                    ("10.0.1.130", 3389),
+#                    ("10.0.0.3", 21)
+#                    ] 
+session_ttl=1800 #60 Minutes by default, and gives a good balance for allowing stale sessions to close and allow other users to connect to the Bastion host.
 session_display_name="MadeWithPython"
 ##########################
 
@@ -39,6 +40,18 @@ pub_key_contents=pub_key_open.read()
 
 ##########################
 
+def port_open(ip, port):
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.settimeout(5)
+    try:
+        port_open = s.connect_ex((ip, int(port))) == 0 # True if open, False if not
+        if port_open:
+            s.shutdown(socket.SHUT_RDWR)
+    except Exception:
+        port_open = False
+    s.close()
+    return port_open
+    
 def ssh_rsa_set():
     if pub_key_contents:
         return
@@ -63,12 +76,13 @@ def pseudo_random_ports():
 pseudo_random_ports()
 
 def verify_user_authed():
-    print("\nAuthenticating User. . .")
+    print("")
+    print("Authenticating OCI User...")
     auth_status=(identity.get_user(config["user"]).data.lifecycle_state)
     if auth_status == "ACTIVE":
-        print("User Has Been Authenticated With OCI\n")
+        print("OCI User Has Been Authenticated...")
     else:
-        print("Unable to Authenticate. . . Make sure you have the OCI cli installed and the user configured")
+        print("Unable to Authenticate... Make sure you have the OCI cli installed and the user configured")
         print("Install OCI CLI Python SDK - https://docs.oracle.com/en-us/iaas/Content/API/SDKDocs/climanualinst.htm")
         print("The OCI Console can help create a configuration file for your user.")
         print("---------->Go to Profile->'Username'->API Key")
@@ -94,7 +108,7 @@ def verify_ssh_avail():
     except:
         print("OpenSSH needs to be accessible to use this script")
         print("If you are using Windows, make sure you are using 64 Bit Python and that OpenSSH is installed on your machine, and is assessable by 'ssh'")
-        print("Exiting . . . ")
+        print("Exiting ... ")
         quit(-1)
 
 verify_ssh_avail()
@@ -102,28 +116,19 @@ verify_ssh_avail()
 def verify_bastion_host_avail():
     try:
         port_open(bastion_fqdn, 22)
-        print("Connected to Bastion Host in "+config["region"])
+        print("Bastion Host {} is Reachable".format(config["region"]))
+        print("")
     except:
         print("Unable to reach the bastion host "+bastion_fqdn)
         quit(-1)
+
+verify_bastion_host_avail()
 
 def local_random():
         
         port_value=random.randint(20000,50000)
         return(port_value)
         #Define a local port. This avoids local port collisions which cause Bastions sessions to terminate prematurely.
-
-def port_open(ip, port):
-    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    s.settimeout(5)
-    try:
-        port_open = s.connect_ex((ip, int(port))) == 0 # True if open, False if not
-        if port_open:
-            s.shutdown(socket.SHUT_RDWR)
-    except Exception:
-        port_open = False
-    s.close()
-    return port_open
 
 def create_bastion_session():
     try:
@@ -148,75 +153,105 @@ def create_bastion_session():
 create_bastion_session()
 
 def connect_local():
-    print("You can set this as a dictionary of values if you plan on connecting to these instances frequently\n just uncomment and add your data to the sample variable XXX\n\n")
-    #local_port=local_random()
     try: 
         if local_connections != "":
-            print("Opening Predefined Connections")
+            print("")
+            print(">>>1:1 OCI Instance Mappings<<<")
             for (ip_addr, remote_port) in local_connections:
                 local_port=local_random()
-                subprocess.Popen(("ssh", "-o serveraliveinterval=60", "-N", "-L", "{}:{}:{}".format(local_port, ip_addr, remote_port), "{}@{}".format(bastion_session.data.id, bastion_fqdn)))
-                print("Connections from localhost:{} MAPPED TO {}:{}".format(local_port, ip_addr, remote_port))
-            holding_pattern=input("\nPress Control-C to close the local forwarding Session:\n")
+                try:
+                    time.sleep(.2)
+                    subprocess.Popen(("ssh", "-o serveraliveinterval=60", "-N", "-L", "{}:{}:{}".format(local_port, ip_addr, remote_port), "{}@{}".format(bastion_session.data.id, bastion_fqdn)))
+                except:
+                    print("Unable to connect to {}:{}".format(ip_addr, remote_port))
+                print("{}:{} MAPPED TO localhost:{}".format(ip_addr, remote_port, local_port))
+            print("")
+            print("Press Control-C to close the terminal")
+            while True:
+                holding_pattern=input(">")
+                if holding_pattern == "":
+                    continue              
+                else:
+                    KeyboardInterrupt
+                    pass
         else:
             local_port=local_random()
             print("Here are the inputs you need to make a 1:1 mapping with your OCI instances")
             print("localmachine(Localport)--->OCI_Instance(Serving_Port)\n")
-            oci_private_ip=input("Private IP of the OCI Instance You want to connect to\n>")
-            remote_port=input("\nOCI Port you want to connect to\n>")
+            print("Private IP of the OCI Instance You want to connect to:")
+            oci_private_ip=input(">")
+            print("OCI Port you want to connect to:")
+            remote_port=input(">")
             print(local_port)
-            #print("Connecting to " + oci_private_ip + " on port " + remote_port)
-            #print("\n\n\nConnected!\nConnect to your OCI instance through \nlocalhost:" +local_port) 
+            print("Connect to your OCI instance through:")
+            print("localhost:{}".format(local_port)) 
             local_forwarding=subprocess.Popen(("ssh", "-o serveraliveinterval=60", "-N", "-L", "{}:{}:{}".format(local_port, oci_private_ip, remote_port), "{}@{}".format(bastion_session.data.id, bastion_fqdn)))
             #Error handling from sdrerr, if port is unavailable, like the below error.
             #SSH Error Line#1 :channel_setup_fwd_listener_tcpip: cannot listen to port: 10001
             #SSH Error Line#2 : Could not request local forwarding.
-            holding_pattern=input("\nPress Control-C to close the local forwarding Session:\n")
+            print("Press Control-C to Exit")
+            while True:
+                holding_pattern=input(">")
+                if holding_pattern == "":
+                    continue              
+                else:
+                    KeyboardInterrupt
+                    pass
     except:
-        print("Rerun the script to create a new session.")
+        print("")
+        print("Run the script again to continue your session.")
         quit(-1)
         
 def socks5_session():
     timeout = time.time()+11
     socks5_lport=local_random()
+    print("\nThe Bastion Session is Active. Establishing the Tunnel...")
+    time.sleep(3)
     while timeout>time.time():
-        print("\nThe Bastion Session is Active. Establishing the Tunnel. . .")
         try:
-            socks5_subprocess=subprocess.Popen((("ssh", "-o serveraliveinterval=60", "-N", "-D", "{}:{}".format("127.0.0.1",socks5_lport), "{}@{}".format(bastion_session.data.id, bastion_fqdn, 
-            stdout=None, 
-            stderr=None,
-            capture_output=False))))
+            socks5_subprocess=subprocess.Popen(["ssh", "-o serveraliveinterval=60", "-N", "-D", "{}:{}".format("127.0.0.1",socks5_lport), "{}@{}".format(bastion_session.data.id, bastion_fqdn)],
+            stdout=subprocess.DEVNULL, 
+            stderr=subprocess.STDOUT)
             time.sleep(2)
             if port_open("127.0.0.1", socks5_lport):
-                print("\n\n\n!!!!!Tunnel Established!!!!!\n")
-                print("########################################LEAVE THIS WINDOW OPEN##############################")
-                print("##               Point your SOCKS5 client [Web Browser], [DB Client], [etc] to . . .")
-                print("                                localhost:" +str(socks5_lport))
-                print("##")
-                print("## Applications that are not SOCKS aware [RDP] can still take advantage of local forwarding.")
-                print("## Set the ''local_connections' variable to statically build many local forwarding sessions.")
-                print("#############################################################################################")
-                while True:
-                    #Evenually add "If local_connections var is set, run the function. Otherwise, wait for the user to do it."
-                    moreconnections=input("\nType 'local' to configure local forwarding sessions. Press 'Control-C' to tear down the SOCKS5 session.\nNOTE:SOCKS5 and Local forwarding will run at the same time over the Bastion Session.\n>")
-                    if moreconnections != "local":
-                        continue
-                    else:
-                        connect_local()
-
+                print("Connection Established Over the Bastion Session!")
+                print("")
+                print("#####LEAVE THIS WINDOW OPEN#####")
+                print(">>>SOCKS5 PROXY<<<")
+                print("MAPPED TO localhost:{}".format(socks5_lport))
+                if local_connections != "":
+                    time.sleep(2) #Might need a little more time to create the 1:1s
+                    connect_local() 
+                else:
+                    while True:
+                        print("")
+                        print("Type 'local' to configure local forwarding to an OCI instance.")
+                        print("You can set the 'local_connections' variable to do this automatically")
+                        print("")
+                        print("Press 'Control-C' (Mac/Linux) or 'Control-z'+'enter' (Windows) to destroy the session.")
+                        moreconnections=input(">")
+                        if moreconnections != "local":
+                            print("Notavalidentry")
+                            continue
+                        else:
+                            connect_local()
+            else:
+                continue
+        
         except:
-            socks5_subprocess.kill()
             bastion_client.delete_session(session_id=bastion_session.data.id)
-            print("\nConnection Closed. Run the script to build another session!")
+            print("")
+            print("Bastion Session is Deleted and Script is Closed.")
+            quit(-1)
 
 def verify_bastion_session_lifecycle():
     session_response=bastion_client.get_session(session_id=bastion_session.data.id)
     if session_response.data.lifecycle_state == "ACTIVE":
         socks5_session()
     if session_response.data.lifecycle_state == "CREATING":
-        print("OCI Is Creating The Bastion Session . . .")
+        print("OCI Is Creating A Bastion Session...")
         session_response=bastion_client.get_session(session_id=bastion_session.data.id)
-        time.sleep(1)
+        time.sleep(3)
         verify_bastion_session_lifecycle()
     if session_response.data.lifecycle_state == "DELETED":
         print("The Bastion Session has Timed Out.\n Run the Script Again to Create a New One")
@@ -226,3 +261,30 @@ verify_bastion_session_lifecycle()
 
 ###TODO###
 ##Need to test on a Windows Client, and then redo the whole script :)
+#Initial Testing Shows that this is working.
+#
+#Need Popen to be aware of the (-1) status code of the process and close the script.
+#Connection to host.bastion.us-ashburn-1.oci.oraclecloud.com closed by remote host.
+#Transferred: sent 3904, received 2084 bytes, in 1799.7 seconds
+#Bytes per second: sent 2.2, received 1.2
+#debug1: Exit status -1
+#I tried to increase the timeout on the bastion session to see if it's bastions fault or an SSH config issue.
+#
+#Timeout definitely happens with 30min of inactivity on the proxy.
+#Transferred: sent 6780, received 5420 bytes, in 1866.5 seconds
+#Bytes per second: sent 3.6, received 2.9
+#debug1: Exit status -1
+#Connection to host.bastion.us-ashburn-1.oci.oraclecloud.com closed by remote host.
+#
+#Also need to do some error handling for a closed bastion session
+#raise exceptions.ServiceError(
+#oci.exceptions.ServiceError: {'target_service': 'bastion', 'status': 409, 'code': 'Conflict', 'opc-request-id': 'B38F43853FB849C296339CC5841C1BBA/ACBF59C7D67860E5770F653CF4AE835E/21531FACE093480CC0023E8432E4B764', 'message': 'resource is not allowed to delete with current state', 'operation_name': 'delete_session', 'timestamp': '2023-01-31T21:02:01.794542+00:00', 'client_version': 'Oracle-PythonSDK/2.90.2', 'request_endpoint': 'DELETE https://bastion.us-ashburn-1.oci.oraclecloud.com/20210331/sessions/ocid1.bastionsession.oc1.iad.amaaaaaac3adhhqa2eley4ow7ww5x3hmcvrtgbl5rm4mtx4dl5aqxsquce7q', 'logging_tips': 'To get more info on the failing request, refer to https://docs.oracle.com/en-us/iaas/tools/python/latest/logging.html for ways to log the request/response details.', 'troubleshooting_tips': "See https://docs.oracle.com/iaas/Content/API/References/apierrors.htm#apierrors_409__409_conflict for more information about resolving this error. Also see https://docs.oracle.com/iaas/api/#/en/bastion/20210331/Session/DeleteSession for details on this operation's requirements. If you are unable to resolve this bastion issue, please contact Oracle support and provide them this full error message."}
+
+#Local Sessions Closing Prematurly. Need to use the port_open function to retry the mapping if it's unsuccuessful.
+#10.0.0.254:8000 MAPPED TO localhost:34003
+#10.0.1.130:3389 MAPPED TO localhost:35849
+#Connection closed by 147.154.11.76 port 22
+#10.0.0.3:21 MAPPED TO localhost:21990
+
+#Press Control-C to close the terminal
+#:Connection closed by 147.154.11.76 port 22
