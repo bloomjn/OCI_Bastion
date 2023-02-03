@@ -17,12 +17,12 @@ except ImportError:
 
 timer=(time.time())
 ###Required Variables###
-bastion_host_ocid="" #OCID of the Bastion Host that was created in OCI
 config = oci.config.from_file(
 	"~/.oci/config",
 	"DEFAULT") #OCI Configuration File that was generated from the API Key in the OCI CLI
 pub_key_file=r"/Users/Jake/.ssh/id_rsa.pub" #Specify the full path of your SSH public key.
-#seed_int="" #You will be given a value to copy here after the first run of the script.
+#seed_int="358" #You will be given a value to copy here after the first run of the script.
+#bastion_host_ocid="ocid1.XX." #OCID of the Bastion Host that was created in OCI
 ##########################
     
 ###Optional Variables###
@@ -67,8 +67,9 @@ def preflight_checks():
         raise SystemExit
     try:
         seed_int
-        random.seed(seed_int)
-        logging.info("Seed Set")
+        if seed_int != "":
+            random.seed(seed_int)
+            logging.info("Seed Set")
     except NameError:
         seedling=random.randint(1,10000)
         print("Update the seed_int variable with the value below before continuing.")
@@ -88,8 +89,8 @@ def preflight_checks():
         print("3.) Copy the config file to your .oci directory") 
         raise SystemExit
     try:
-        bastion_host_ocid
-        logging.info("Bastion Host ID is set")
+        if bastion_host_ocid != "":
+            logging.info("Bastion Host ID is set")
     except NameError:
         print("The Bastion OCID needs to be set at the beginning of the Python Script.")
         print("Update the bastion_host_ocid with the Bastion Host OCID you want to connect to")
@@ -216,6 +217,8 @@ script_navigator()
 #Script works well. Next step would be to replace use the asyncio module to run muliple SSH instances and watch each process. 
 #This would let me restart the process when it fails (while the bastion session is up) or close the script on failure
 #I would also get better error handling instead of waiting for the port to listen on the local machine.
+
+#Could list the bastion hosts that are available to the user if they havne't set an OCID.
 
 #Stretch goal
 #Figure out how to make asyncio a fake VPN, avoiding local forwarding configuration and 1:1 mapping
